@@ -4,6 +4,7 @@
 ## [br][Ability] resources can be activated, cancelled or finished under some circumstances and are used to apply 
 ## [GameplayEffect] resources to [GameplayAttributeMap] instances.
 
+@icon("res://addons/godot_gameplay_systems/attributes_and_abilities/assets/AbilityContainer.svg")
 
 class_name AbilityContainer extends Node
 
@@ -38,7 +39,7 @@ signal cooldown_ended(ability: Ability)
 ## Emitted when an ability cooldown started
 signal cooldown_started(ability: Ability)
 ## Emitted when tags are updated
-signal tags_updated(updaated_tags: Array[String], previous_tags: Array[String])
+signal tags_updated(updated_tags: Array[String], previous_tags: Array[String])
 
 
 @export_category("Abilities")
@@ -107,7 +108,7 @@ func _get_cooldown_timer(ability: Ability) -> Timer:
 ## Handles the [signal Ability.activated] signal
 ## [br]It's called internally by the current [AbilityContainer], so you should not call it.
 func _handle_ability_activated(ability: Ability, activation_event: ActivationEvent) -> void:
-	if not active:
+	if not _is_eligible_for_operation(activation_event):
 		return
 
 	_handle_lifecycle_tagging(LifeCycle.Activated, ability)
@@ -130,7 +131,7 @@ func _handle_ability_activated(ability: Ability, activation_event: ActivationEve
 ## Handles the [signal Ability.blocked] signal.
 ## [br]It's called internally by the current [AbilityContainer], so you should not call it.
 func _handle_ability_blocked(ability: Ability, activation_event: ActivationEvent) -> void:
-	if not active:
+	if not _is_eligible_for_operation(activation_event):
 		return
 		
 	ability_blocked.emit(ability, activation_event)
@@ -140,7 +141,7 @@ func _handle_ability_blocked(ability: Ability, activation_event: ActivationEvent
 ## Handles the [signal Ability.cancelled] signal
 ## [br]It's called internally by the current [AbilityContainer], so you should not call it.
 func _handle_ability_cancelled(ability: Ability, activation_event: ActivationEvent) -> void:
-	if not active:
+	if not _is_eligible_for_operation(activation_event):
 		return
 	
 	_handle_lifecycle_tagging(LifeCycle.Cancelled, ability)
@@ -151,7 +152,7 @@ func _handle_ability_cancelled(ability: Ability, activation_event: ActivationEve
 ## Handles the [signal Ability.ended] signal
 ## [br]It's called internally by the current [AbilityContainer], so you should not call it.
 func _handle_ability_ended(ability: Ability, activation_event: ActivationEvent) -> void:
-	if not active:
+	if not _is_eligible_for_operation(activation_event):
 		return
 	
 	_handle_lifecycle_tagging(LifeCycle.Ended, ability)
@@ -192,13 +193,15 @@ func _handle_lifecycle_tagging(lifecycle: LifeCycle, ability: Ability) -> void:
 			return
 
 
+## Returns [code]true[/code] if the [AbilityContainer] can process and [ActivationEvent], [code]false[/code] otherwise.
+func _is_eligible_for_operation(activation_event: ActivationEvent) -> bool:
+	return activation_event.ability_container == self and active
+
+
 ## The [method Node._ready] override
 func _ready() -> void:
 	gameplay_attribute_map = get_node(gameplay_attribute_map_path)
-
-	for i in abilities.size():
-		var ability = abilities[i - 1]
-		grant(ability)
+	grant_all_abilities()
 
 
 ## Activates a single [Ability] calling [method Ability.try_activate].
@@ -351,18 +354,19 @@ func filter_abilities(predicate: Callable, includes_ungranted = false) -> Array[
 
 ## Gives an [Ability] at runtime
 ## If the [Ability] has already been granted, it will be ignored silently
-func grant(ability: Ability) -> void:
+## [br]Returns [code]true[/code] if the ability has been granted, [code]false[/code] otherwise
+func grant(ability: Ability) -> bool:
 	# It's not active, maybe the owner is dead or on holiday
 	if not active:
-		return
+		return false
 	
 	# Obviously skip granting if ability is null
 	if ability == null:
-		return
+		return false
 	
 	# Skips if cannot be granted
 	if not can_grant(ability):
-		return
+		return false
 
 	# Removes from abilities array if it's there. This avoids duplication which could lead to bugs.
 	var ability_index = abilities.find(ability)
@@ -393,6 +397,28 @@ func grant(ability: Ability) -> void:
 
 	# Emits grant signal, so UI/parent nodes can do stuff with it
 	ability_granted.emit(ability)
+
+	# Returns true, so the caller knows the ability has been granted
+	return true
+
+
+## Grants many [Ability] at runtime
+## If an [Ability] is granted, it is removed from the [member AbilityContainer.abilities] array and added to the [member AbilityContainer.granted_abilities] array.
+## If an [Ability] has already been granted, it will be ignored silently
+## [br]Returns [code]int[/code] the number of abilities granted
+func grant_all_abilities() -> int:
+	var granted = 0
+	var cursor = -1
+
+	for i in abilities.size():
+		var ability = abilities[cursor]
+
+		if grant(ability):
+			granted += 1
+		else:
+			cursor -= 1
+
+	return granted
 
 
 ## Returns [code]true[/code] if has an [Ability] which satisfies the [Callable] predicate, [code]false[/code] otherwise

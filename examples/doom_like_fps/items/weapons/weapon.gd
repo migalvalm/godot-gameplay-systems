@@ -10,6 +10,7 @@ class_name DoomLikeFPSWeaponItem extends Item
 @export var bullet_damage: float = 10.0
 @export var bullet_speed: float = 10.0
 @export var reload_time: float = 0.0
+@export var recoil: float = 0.05
 
 
 const bullet_scene = preload("res://examples/doom_like_fps/items/weapons/bullet.tscn")
@@ -37,7 +38,14 @@ func _activate(evt: ItemActivationEvent) -> void:
 
 	if player:
 		print("bullet fired from " + name)
-		bullet.transform = player.active_weapon.global_transform
+		
+		if player.active_weapon_0.current:
+			bullet.transform = player.active_weapon_0.global_transform
+		elif player.active_weapon_1.current:
+			bullet.transform = player.active_weapon_1.global_transform
+		else:
+			bullet.transform = player.global_transform
+
 		bullet.velocity = -bullet.transform.basis.z * bullet.speed
 
 		player.get_tree().root.add_child(bullet)
